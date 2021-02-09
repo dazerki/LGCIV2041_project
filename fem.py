@@ -60,4 +60,18 @@ def geomet(namefile):
         line_split = line.split()
         CRigid[i] = [float(j) for j in line_split]
 
-    return 0
+    data_structure = {
+        "nNode": nNode,
+        "nElement": nElement,
+        "nMaterial": nMaterial,
+        "nSection": nSection,
+        "coord": coord,
+        "IN": IN,
+        "IMat": IMat,
+        "ISect": ISect,
+        "CMat": CMat,
+        "CSect": CSect,
+        "nRigid": nRigid,
+        "CRigid": CRigid
+    }
+    return data_structure

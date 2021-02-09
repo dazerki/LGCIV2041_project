@@ -5,4 +5,5 @@ import fem
 if __name__ == "__main__":
     #main code
     #geomet
-    fem.geomet("FRAME01.txt")
+    data_structure = fem.geomet("FRAME01.txt")
+    print(data_structure["coord"][(1,0)])
