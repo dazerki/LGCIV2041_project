@@ -51,10 +51,13 @@ def geomet(namefile):
         line_split = line.split()
         CSect[i] = [float(j) for j in line_split]
 
-    print(CSect[0,1])
-
-
-
-
+    #rigid link data
+    f.readline()
+    nRigid = int(f.readline())
+    CRigid = np.empty((nRigid,4))
+    for i in range(nRigid):
+        line = f.readline()
+        line_split = line.split()
+        CRigid[i] = [float(j) for j in line_split]
 
     return 0
