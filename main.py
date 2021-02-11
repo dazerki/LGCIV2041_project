@@ -4,12 +4,15 @@ import fem
 
 if __name__ == "__main__":
     #main code
-    f = open("FRAME01.txt", "r")
+    f = open("FRAME03.txt", "r")
     #geomet
     data_structure = fem.geomet(f)
 
-    data_structure = fem.scode(data_structure, f)
+    fem.scode(data_structure, f)
 
-    
+    fem.loads(data_structure, f)
+
+
+
 
     f.close()

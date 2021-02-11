@@ -103,7 +103,7 @@ def scode(data_structure, f):
         for j in range(1,4):
             if Idof[i,j] == 0:
                 nDof = nDof + 1
-                Idof[i,j] = nDof
+                Idof[i,j] = int(nDof)
             elif Idof[i,j] > 0:
                 master_node = Idof[i,j]
                 Idof[i,j] = Idof[master_node,j]
@@ -126,7 +126,7 @@ def scode(data_structure, f):
         line_split = line.split()
         CSpring[i] = [float(j) for j in line_split]
 
-    print(Idof)
+
 
     data_structure["Idof"] = Idof
     data_structure["nRest"] = nRest
@@ -135,3 +135,56 @@ def scode(data_structure, f):
     data_structure["CDisp"] = CDisp
     data_structure["nSpring"] = nSpring
     data_structure["CSpring"] = CSpring
+
+    return 0
+
+def loads(data_structure, f):
+    Idof = data_structure["Idof"]
+    nDof = data_structure["nDof"]
+    nElement = data_structure["nElement"]
+
+    #concentrated LOADS
+
+    VLoads = np.zeros(nDof+1)
+
+    f.readline()
+    nCar = int(f.readline())
+    for i in range(1,nCar+1):
+        line = f.readline()
+        line_split = line.split()
+        L = int(Idof[int(line_split[0]), int(line_split[1])])
+        VLoads[L] = VLoads[L] + float(line_split[2])
+
+    #distributed loads
+    Card = np.zeros((nElement+1, 10))
+
+    f.readline()
+    nCard = int(f.readline())
+
+    for i in range(1, nCard+1):
+        line = f.readline()
+        line_split = line.split()
+        Card[int(line_split[0]),1] =  float(line_split[1])
+        Card[int(line_split[0]),2] =  float(line_split[2])
+        Card[int(line_split[0]),3] =  float(line_split[3])
+
+    #thermal VARIATIONS
+
+    f.readline()
+    nTemp = int(f.readline())
+    for i in range(1,nTemp+1):
+        line = f.readline()
+        line_split = line.split()
+        Card[int(line_split[0]), 4] = float(line_split[1])
+        Card[int(line_split[0]), 5] = float(line_split[2])
+
+    # PRETENSION
+     f.readline()
+     nPres = int(f.readline())
+     for i in range(1,nPres+1):
+         line = f.readline()
+         line_split = line.split()
+         Card[int(line_split[0]), 6] = float(line_split[1])
+         Card[int(line_split[0]), 7] = float(line_split[2])
+         Card[int(line_split[0]), 8] = float(line_split[3])
+         Card[int(line_split[0]), 9] = float(line_split[4])
