@@ -1,5 +1,6 @@
 #usefull functions
 import numpy as np
+from math import cos, sin
 
 
 def geomet(f):
@@ -15,8 +16,8 @@ def geomet(f):
 
     #coordinate
     f.readline()
-    coord = np.empty((nNode+1,2))
-    for i in range(1,nNode+1):
+    coord = np.empty((nNode,2))
+    for i in range(nNode):
         line = f.readline()
         line_split = line.split()
         coord[i,0] = float(line_split[0])
@@ -24,10 +25,10 @@ def geomet(f):
 
     #connectivity DATA
     f.readline()
-    IN = np.empty((nElement+1,2))
-    IMat = np.empty(nElement+1)
-    ISect = np.empty(nElement+1)
-    for i in range(1,nElement+1):
+    IN = np.empty((nElement,2))
+    IMat = np.empty(nElement)
+    ISect = np.empty(nElement)
+    for i in range(nElement):
         line = f.readline()
         line_split = line.split()
         IN[i,0] = int(line_split[0])
@@ -37,16 +38,16 @@ def geomet(f):
 
     #materials data
     f.readline()
-    CMat = np.empty((nMaterial+1,4))
-    for i in range(1,nMaterial+1):
+    CMat = np.empty((nMaterial,4))
+    for i in range(nMaterial):
         line = f.readline()
         line_split = line.split()
         CMat[i] = [float(j) for j in line_split]
 
     #section data
     f.readline()
-    CSect = np.empty((nSection+1,4))
-    for i in range(1,nSection+1):
+    CSect = np.empty((nSection,4))
+    for i in range(nSection):
         line = f.readline()
         line_split = line.split()
         CSect[i] = [float(j) for j in line_split]
@@ -54,8 +55,8 @@ def geomet(f):
     #rigid link data
     f.readline()
     nRigid = int(f.readline())
-    CRigid = np.empty((nRigid+1,4))
-    for i in range(1,nRigid+1):
+    CRigid = np.empty((nRigid,4))
+    for i in range(nRigid):
         line = f.readline()
         line_split = line.split()
         CRigid[i] = [float(j) for j in line_split]
@@ -80,7 +81,7 @@ def geomet(f):
 def scode(data_structure, f):
     nNode = data_structure["nNode"]
 
-    Idof = np.zeros((nNode+1,4))
+    Idof = np.zeros((nNode,3))
 
     #restraints
     f.readline()
@@ -99,11 +100,11 @@ def scode(data_structure, f):
 
     nDof = 0
 
-    for i in range(1,nNode+1):
-        for j in range(1,4):
+    for i in range(nNode):
+        for j in range(3):
             if Idof[i,j] == 0:
-                nDof = nDof + 1
                 Idof[i,j] = int(nDof)
+                nDof = nDof + 1
             elif Idof[i,j] > 0:
                 master_node = Idof[i,j]
                 Idof[i,j] = Idof[master_node,j]
@@ -111,8 +112,8 @@ def scode(data_structure, f):
     #displacement
     f.readline()
     nDisp = int(f.readline())
-    CDisp = np.empty((nDisp+1,3))
-    for i in range(1,nDisp+1):
+    CDisp = np.empty((nDisp,3))
+    for i in range(nDisp):
         line = f.readline()
         line_split = line.split()
         CDisp[i] = [float(j) for j in line_split]
@@ -120,8 +121,8 @@ def scode(data_structure, f):
     #spring
     f.readline()
     nSpring = int(f.readline())
-    CSpring = np.empty((nSpring+1,3))
-    for i in range(1,nSpring+1):
+    CSpring = np.empty((nSpring,3))
+    for i in range(nSpring):
         line = f.readline()
         line_split = line.split()
         CSpring[i] = [float(j) for j in line_split]
@@ -145,23 +146,23 @@ def loads(data_structure, f):
 
     #concentrated LOADS
 
-    VLoads = np.zeros(nDof+1)
+    VLoads = np.zeros(nDof)
 
     f.readline()
     nCar = int(f.readline())
-    for i in range(1,nCar+1):
+    for i in range(nCar):
         line = f.readline()
         line_split = line.split()
         L = int(Idof[int(line_split[0]), int(line_split[1])])
         VLoads[L] = VLoads[L] + float(line_split[2])
 
     #distributed loads
-    Card = np.zeros((nElement+1, 10))
+    Card = np.zeros((nElement, 10))
 
     f.readline()
     nCard = int(f.readline())
 
-    for i in range(1, nCard+1):
+    for i in range(nCard):
         line = f.readline()
         line_split = line.split()
         Card[int(line_split[0]),1] =  float(line_split[1])
@@ -172,19 +173,52 @@ def loads(data_structure, f):
 
     f.readline()
     nTemp = int(f.readline())
-    for i in range(1,nTemp+1):
+    for i in range(nTemp):
         line = f.readline()
         line_split = line.split()
         Card[int(line_split[0]), 4] = float(line_split[1])
         Card[int(line_split[0]), 5] = float(line_split[2])
 
     # PRETENSION
-     f.readline()
-     nPres = int(f.readline())
-     for i in range(1,nPres+1):
-         line = f.readline()
-         line_split = line.split()
-         Card[int(line_split[0]), 6] = float(line_split[1])
-         Card[int(line_split[0]), 7] = float(line_split[2])
-         Card[int(line_split[0]), 8] = float(line_split[3])
-         Card[int(line_split[0]), 9] = float(line_split[4])
+    f.readline()
+    nPres = int(f.readline())
+    for i in range(nPres):
+        line = f.readline()
+        line_split = line.split()
+        Card[int(line_split[0]), 6] = float(line_split[1])
+        Card[int(line_split[0]), 7] = float(line_split[2])
+        Card[int(line_split[0]), 8] = float(line_split[3])
+        Card[int(line_split[0]), 9] = float(line_split[4])
+
+
+def rotate_vect(u, alpha):
+    A = np.array([[cos(alpha), -sin(alpha), 0, 0, 0, 0],
+                [sin(alpha), cos(alpha), 0, 0, 0, 0],
+                [0, 0, 1, 0 ,0, 0],
+                [0, 0, 0, cos(alpha), -sin(alpha), 0],
+                [0, 0, 0, sin(alpha), cos(alpha), 0],
+                [0, 0, 0, 0, 0, 1]])
+    return A @ u
+
+def rotate_mat(k, alpha):
+    A = np.array([[cos(alpha), -sin(alpha), 0, 0, 0, 0],
+                [sin(alpha), cos(alpha), 0, 0, 0, 0],
+                [0, 0, 1, 0 ,0, 0],
+                [0, 0, 0, cos(alpha), -sin(alpha), 0],
+                [0, 0, 0, sin(alpha), cos(alpha), 0],
+                [0, 0, 0, 0, 0, 1]])
+    return A @ k @ A.transpose()
+
+def compute_angle(coord, node1, node2):
+    dy = coord[node2,1] - coord[node1,1]
+    dx = coord[node2,0] - coord[node1,0]
+    return np.arctan2(dy,dx)
+
+def k_local_EB(E, A, I, L):
+    k = np.array([[E*A/L, 0, 0, -E*A/L, 0, 0],
+                [0, 12*E*I/(L**3), 6*E*I/(L**2), 0, -12*E*I/(L**3), 6*E*I/(L**2)],
+                [0, 6*E*I/(L**2), 4*E*I/L, 0, -6*E*I/(L**2), 2*E*I/L],
+                [-E*A/L, 0, 0, E*A/L, 0, 0],
+                [0, -12*E*I/(L**3), -6*E*I/(L**2), 0, 12*E*I/(L**3), -6*E*I/(L**2)],
+                [0, 6*E*I/(L**2), 2*E*I/L, 0, -6*E*I/(L**2), 4*E*I/L]])
+    return k
