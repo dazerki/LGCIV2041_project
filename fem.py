@@ -222,3 +222,36 @@ def k_local_EB(E, A, I, L):
                 [0, -12*E*I/(L**3), -6*E*I/(L**2), 0, 12*E*I/(L**3), -6*E*I/(L**2)],
                 [0, 6*E*I/(L**2), 2*E*I/L, 0, -6*E*I/(L**2), 4*E*I/L]])
     return k
+
+def assemble(data_structure):
+    n_max_dof = data_structure["nNode"]*3
+    nElement = data_structure["nElement"]
+    IMat = data_structure["IMat"]
+    CMat = data_structure["CMat"]
+    IN = data_structure["IN"]
+    ISect = data_structure["ISect"]
+    CSect = data_structure["CSect"]
+    coord = data_structure["coord"]
+
+    k_global = np.zeros((n_max_dof, n_max_dof))
+
+    for i in range(nElement):
+        node1 = int(IN[i,0])
+        node2 = int(IN[i,1])
+        E = CMat[int(IMat[i]), 0]
+        A = CSect[int(ISect[i]), 0]
+        I = CSect[int(ISect[i]), i]
+        L = ((coord[node1,0] - coord[node2,0])**2 + (coord[node1,1] - coord[node2,1])**2)**0.5
+        alpha = compute_angle(coord, node1, node2)
+
+        k_local = k_local_EB(E, A, I, L)
+        k_local = rotate_mat(k_local, alpha)
+
+        k_global[node1*3:node1*3+3,node1*3:node1*3+3] = np.add(k_global[node1*3:node1*3+3,node1*3:node1*3+3], k_local[0:3, 0:3])
+        k_global[node1*3:node1*3+3,node2*3:node2*3+3] = np.add(k_global[node1*3:node1*3+3,node2*3:node2*3+3], k_local[0:3, 3:6])
+        k_global[node2*3:node2*3+3,node1*3:node1*3+3] = np.add(k_global[node2*3:node2*3+3,node1*3:node1*3+3], k_local[3:6, 0:3])
+        k_global[node2*3:node2*3+3,node2*3:node2*3+3] = np.add(k_global[node2*3:node2*3+3,node2*3:node2*3+3], k_local[3:6, 3:6])
+
+    print(k_global)
+
+    return 0

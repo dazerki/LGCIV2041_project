@@ -12,7 +12,7 @@ if __name__ == "__main__":
 
     fem.loads(data_structure, f)
 
-    
+    fem.assemble(data_structure)
 
 
 
