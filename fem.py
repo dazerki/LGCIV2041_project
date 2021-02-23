@@ -1,7 +1,7 @@
 #usefull functions
 import numpy as np
 from math import cos, sin
-
+#from scipy.sparse.linalg import spsolve
 
 def geomet(f):
 
@@ -190,6 +190,13 @@ def loads(data_structure, f):
         Card[int(line_split[0]), 8] = float(line_split[3])
         Card[int(line_split[0]), 9] = float(line_split[4])
 
+    data_structure["VLoads"] = VLoads
+    data_structure["Card"] = Card
+    data_structure["nCard"] = nCard
+    data_structure["nTemp"] = nTemp
+    data_structure["nPres"] = nPres
+
+    return 0
 
 def rotate_vect(u, alpha):
     A = np.array([[cos(alpha), -sin(alpha), 0, 0, 0, 0],
@@ -223,6 +230,114 @@ def k_local_EB(E, A, I, L):
                 [0, 6*E*I/(L**2), 2*E*I/L, 0, -6*E*I/(L**2), 4*E*I/L]])
     return k
 
+def equivalent_nodal_forces(data_structure, NE):
+    ENF = np.zeros(6)
+    Card = data_structure["Card"]
+    coord = data_structure["coord"]
+    ISect = data_structure["ISect"]
+    IMat = data_structure["IMat"]
+    CMat = data_structure["CMat"]
+    CSect = data_structure["CSect"]
+    IN = data_structure["IN"]
+
+    N1 = int(IN[NE,0])
+    N2 = int(IN[NE,1])
+
+    IS = int(ISect[NE])
+    IM = int(IMat[NE])
+    AA = CSect[IS, 0]
+    AJ = CSect[IS, 1]
+    CHI = CSect[IS, 2]
+    AH = CSect[IS, 3]
+    EE = CMat[IM, 0]
+    CNU = CMat[IM, 1]
+    ALPHA = CMat[IM, 2]
+    WEIGHT = CMat[IM, 3]
+
+    if(data_structure["nRigid"]>0):
+        CRigid = data_structure["CRigid"]
+        A = CRigid[NE,1]
+        B = CRigid[NE,2]
+        C = CRigid[NE,3]
+        D = CRigid[NE,4]
+    else:
+        A=0; B=0; C=0; D=0;
+
+
+    DX = coord[N2,0] - coord[N1,0] - A - C
+    DY = coord[N2,1] - coord[N1,1] - B - D
+    AL = (DX**2 + DY**2)**0.5
+    CA = DX/AL
+    SA = DY/AL
+
+    PX = Card[NE, 0]
+    PY1 = Card[NE, 1]
+    PY2 = Card[NE, 2]
+    DTI = Card[NE, 3]
+    DTS = Card[NE, 4]
+    PREC = Card[NE, 5]
+    E1 = Card[NE, 6]
+    E2 = Card[NE, 7]
+    EM = Card[NE, 8]
+
+    ALW = WEIGHT*AA
+
+    PX = PX - ALW*SA
+    PY1 = PY1 - ALW*CA
+    PY2 = PY2 - ALW*CA
+
+    DTM = (DTS+DTI)/2
+    DTD = (DTS-DTI)/2
+
+    TETA1 = (-3*E1 + 4*EM - E2)/AL
+    TETA2 = (E1-4*EM + 3*E2)/AL
+
+    CURV = 4*(E1+E2-2*EM)/AL**2
+
+    WW = PREC*CURV
+    PY1 = PY1 + WW
+    PY2 = PY2 + WW
+
+    DPY = PY2 - PY1
+
+    ENF[0] = PX*AL/2 - ALPHA*DTM*EE*AA
+    ENF[1] = PY1*AL/2 + 0.15*DPY*AL
+    ENF[2] = (PY1*AL**2)/12 + (DPY*AL**2)/30 + 2*ALPHA*DTD*EE*AJ/AH
+    ENF[3] = PX*AL/2 + 0.35*DPY*AL
+    ENF[4] = PY1*AL/2 + 0.35*DPY*AL
+    ENF[5] = -(PY1*AL**2)/12 - (DPY*AL**2)/20 - 2*ALPHA*DTD*EE*AJ/AH
+
+    if data_structure["nRigid"]>0:
+        rigid_vect(ENF, A, B, C, D)
+
+    ENF[0] = ENF[0] + PREC
+    ENF[1] = ENF[1] + PREC*TETA1
+    ENF[2] = ENF[2] - PREC*E1
+    ENF[3] = ENF[3] - PREC
+    ENF[4] = ENF[4] - PREC*TETA2
+    ENF[5] = ENF[5] + PREC*E2
+
+
+    return ENF
+
+def rigid_vect(k, A_r, B_r, C_r, D_r):
+    mat = np.array([[1, 0, -B_r, 0, 0, 0],
+                    [0, 1, A_r, 0, 0, 0],
+                    [0, 0, 1, 0, 0, 0],
+                    [0, 0, 0, 1, 0, D_r],
+                    [0, 0, 0, 0, 1, -C_r],
+                    [0, 0, 0, 0, 0, 1]])
+    return mat.transpose() @ k
+
+def rigid_mat(k, A_r, B_r, C_r, D_r):
+    mat = np.array([[1, 0, -B_r, 0, 0, 0],
+                    [0, 1, A_r, 0, 0, 0],
+                    [0, 0, 1, 0, 0, 0],
+                    [0, 0, 0, 1, 0, D_r],
+                    [0, 0, 0, 0, 1, -C_r],
+                    [0, 0, 0, 0, 0, 1]])
+    return mat @ k @ mat.transpose()
+
 def assemble(data_structure):
     n_max_dof = data_structure["nNode"]*3
     nElement = data_structure["nElement"]
@@ -232,8 +347,15 @@ def assemble(data_structure):
     ISect = data_structure["ISect"]
     CSect = data_structure["CSect"]
     coord = data_structure["coord"]
+    Idof = data_structure["Idof"]
+    nDof = data_structure["nDof"]
+    CRigid = data_structure["CRigid"]
+    nRigid = data_structure["nRigid"]
+    VLoads = data_structure["VLoads"]
 
-    k_global = np.zeros((n_max_dof, n_max_dof))
+
+    k_global = np.zeros((nDof, nDof))
+    N_dof = np.zeros(6)
 
     for i in range(nElement):
         node1 = int(IN[i,0])
@@ -246,12 +368,36 @@ def assemble(data_structure):
 
         k_local = k_local_EB(E, A, I, L)
         k_local = rotate_mat(k_local, alpha)
+        if nRigid > 0:
+            A_r, B_r, C_r, D_r = CRigid[1:5]
+            k_local = rigid_mat(k_local, A_r, B_r, C_r, D_r)
 
-        k_global[node1*3:node1*3+3,node1*3:node1*3+3] = np.add(k_global[node1*3:node1*3+3,node1*3:node1*3+3], k_local[0:3, 0:3])
-        k_global[node1*3:node1*3+3,node2*3:node2*3+3] = np.add(k_global[node1*3:node1*3+3,node2*3:node2*3+3], k_local[0:3, 3:6])
-        k_global[node2*3:node2*3+3,node1*3:node1*3+3] = np.add(k_global[node2*3:node2*3+3,node1*3:node1*3+3], k_local[3:6, 0:3])
-        k_global[node2*3:node2*3+3,node2*3:node2*3+3] = np.add(k_global[node2*3:node2*3+3,node2*3:node2*3+3], k_local[3:6, 3:6])
+        enf = equivalent_nodal_forces(data_structure, i)
+        enfg = rotate_vect(enf, alpha)
+        if nRigid > 0:
+            A_r, B_r, C_r, D_r = CRigid[1:5]
+            enfg = rigid_mat(enfg, A_r, B_r, C_r, D_r)
 
-    print(k_global)
+        N_dof[0:3] = Idof[node1,:]
+        N_dof[3:6] = Idof[node2,:]
+        for j in range(6):
+            i_dof = int(N_dof[j])
+            if i_dof >=0 :
+                VLoads[i_dof] += enfg[j]
+                for p in range(6):
+                     j_dof = int(N_dof[p])
+                     if j_dof >=0 :
+                         k_global[i_dof, j_dof] += k_local[j,p]
 
+
+
+    data_structure["k_global"] = k_global
+    return 0
+
+def linear_solver(data_structure):
+    k_global = data_structure["k_global"]
+    VLoads = data_structure["VLoads"]
+    positions = np.linalg.solve(k_global, VLoads)
+
+    data_structure["positions"] = positions
     return 0
