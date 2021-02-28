@@ -100,6 +100,7 @@ def scode(data_structure, f):
 
     nDof = 0
 
+
     for i in range(nNode):
         for j in range(3):
             if Idof[i,j] == 0:
@@ -108,6 +109,8 @@ def scode(data_structure, f):
             elif Idof[i,j] > 0:
                 master_node = Idof[i,j]
                 Idof[i,j] = Idof[master_node,j]
+
+
 
     #displacement
     f.readline()
@@ -221,13 +224,13 @@ def compute_angle(coord, node1, node2):
     dx = coord[node2,0] - coord[node1,0]
     return np.arctan2(dy,dx)
 
-def k_local_EB(E, A, I, L):
+def k_local_mat(E, A, I, L, Phi):
     k = np.array([[E*A/L, 0, 0, -E*A/L, 0, 0],
-                [0, 12*E*I/(L**3), 6*E*I/(L**2), 0, -12*E*I/(L**3), 6*E*I/(L**2)],
-                [0, 6*E*I/(L**2), 4*E*I/L, 0, -6*E*I/(L**2), 2*E*I/L],
+                [0, 12*E*I/(L**3*(1+Phi)), 6*E*I/(L**2*(1+Phi)), 0, -12*E*I/(L**3*(1+Phi)), 6*E*I/(L**2*(1+Phi))],
+                [0, 6*E*I/(L**2*(1+Phi)), (4+Phi)*E*I/(L*(1+Phi)), 0, -6*E*I/(L**2*(1+Phi)), (2-Phi)*E*I/(L*(1+Phi))],
                 [-E*A/L, 0, 0, E*A/L, 0, 0],
-                [0, -12*E*I/(L**3), -6*E*I/(L**2), 0, 12*E*I/(L**3), -6*E*I/(L**2)],
-                [0, 6*E*I/(L**2), 2*E*I/L, 0, -6*E*I/(L**2), 4*E*I/L]])
+                [0, -12*E*I/(L**3*(1+Phi)), -6*E*I/(L**2*(1+Phi)), 0, 12*E*I/(L**3*(1+Phi)), -6*E*I/(L**2*(1+Phi))],
+                [0, 6*E*I/(L**2*(1+Phi)), (2-Phi)*E*I/(L*(1+Phi)), 0, -6*E*I/(L**2*(1+Phi)), (4+Phi)*E*I/(L*(1+Phi))]])
     return k
 
 def equivalent_nodal_forces(data_structure, NE):
@@ -362,11 +365,17 @@ def assemble(data_structure):
         node2 = int(IN[i,1])
         E = CMat[int(IMat[i]), 0]
         A = CSect[int(ISect[i]), 0]
-        I = CSect[int(ISect[i]), i]
+        I = CSect[int(ISect[i]), 1]
         L = ((coord[node1,0] - coord[node2,0])**2 + (coord[node1,1] - coord[node2,1])**2)**0.5
+        CHI = CSect[int(ISect[i]), 2]
+        CNU = CMat[int(IMat[i]), 1]
+
+        GG = E/(2*(1+CNU))
+        Phi = 12*CHI*(E/GG)*(I/A)/L**2
+
         alpha = compute_angle(coord, node1, node2)
 
-        k_local = k_local_EB(E, A, I, L)
+        k_local = k_local_mat(E, A, I, L, Phi)
         k_local = rotate_mat(k_local, alpha)
         if nRigid > 0:
             A_r, B_r, C_r, D_r = CRigid[1:5]
@@ -392,6 +401,7 @@ def assemble(data_structure):
 
 
     data_structure["k_global"] = k_global
+    data_structure["VLoads"] = VLoads
     return 0
 
 def linear_solver(data_structure):
@@ -401,3 +411,25 @@ def linear_solver(data_structure):
 
     data_structure["positions"] = positions
     return 0
+
+def write_output(data_structure):
+    nDof = data_structure["nDof"]
+    Idof = data_structure["Idof"]
+    nNode = data_structure["nNode"]
+    positions = data_structure["positions"]
+
+    file = open("output.txt", "w")
+
+    file.write("NODAL DISPLACEMENTS: \n")
+    file.write("NODES             U             V           THETA \n")
+    data = np.zeros(3)
+    for i in range(nNode):
+        file.write(str(i) + "           ")
+
+        for j in range(3):
+            if(Idof[i,j]<0):
+                data[j] = 0.0
+            else:
+                data[j] = positions[int(Idof[i,j])]
+
+        file.write('{:e}  {:e}  {:e} \n'.format(data[0], data[1], data[2]))

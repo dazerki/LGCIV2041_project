@@ -16,7 +16,7 @@ if __name__ == "__main__":
 
     fem.linear_solver(data_structure)
 
-    print(data_structure["positions"])
+    fem.write_output(data_structure)
 
 
 
