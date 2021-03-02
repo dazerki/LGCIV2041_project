@@ -108,13 +108,16 @@ def scode(data_structure, f):
 
     return 0
 
-def rotate_vect(u, alpha):
-    alpha_xx = alpha[0]; alpha_xy = alpha[1]; alpha_xz = alpha[2]
-    alpha_yx = alpha[3]; alpha_yy = alpha[4]; alpha_yz = alpha[5]
-    alpha_zx = alpha[6]; alpha_zy = alpha[7]; alpha_zz = alpha[8]
-    T = np.array([[cos(alpha_xx), cos(alpha_yx), cos(alpha_zx)],
-                  [cos(alpha_xy), cos(alpha_yy), cos(alpha_zy)],
-                  [cos(alpha_xz), cos(alpha_yz), cos(alpha_zz)]])
+def rotate_vect(u, coord_1, coord_2):
+    dx = coord_1[0] - coord_2[0]
+    dy = coord_1[1] - coord_2[1]
+    dz = coord_1[2] - coord_2[2]
+    L = (dx**2 + dy**2 + dz**2)**0.5
+    L_star = (dx**2 + dy**2)**0.5
+
+    T = np.array([[dx/L, dy/L, dz/L],
+                  [-dx*dy/(L*L_star), L_star/L, dy*dz/(L*L_star)],
+                  [-dz/L_star, 0, dx/L_star]])
     zero_mat = np.zeros((3,3))
     A = np.block([T, zero_mat, zero_mat, zero_mat],
                  [zero_mat, T, zero_mat, zero_mat],
@@ -122,33 +125,50 @@ def rotate_vect(u, alpha):
                  [zero_mat, zero_mat, zero_mat, T])
     return A @ u
 
-def rotate_mat(k, alpha):
-    alpha_xx = alpha[0]; alpha_xy = alpha[1]; alpha_xz = alpha[2]
-    alpha_yx = alpha[3]; alpha_yy = alpha[4]; alpha_yz = alpha[5]
-    alpha_zx = alpha[6]; alpha_zy = alpha[7]; alpha_zz = alpha[8]
-    T = np.array([[cos(alpha_xx), cos(alpha_yx), cos(alpha_zx)],
-                  [cos(alpha_xy), cos(alpha_yy), cos(alpha_zy)],
-                  [cos(alpha_xz), cos(alpha_yz), cos(alpha_zz)]])
+def rotate_mat(k, coord_1, coord_2):
+    dx = coord_1[0] - coord_2[0]
+    dy = coord_1[1] - coord_2[1]
+    dz = coord_1[2] - coord_2[2]
+    L = (dx**2 + dy**2 + dz**2)**0.5
+    L_star = (dx**2 + dy**2)**0.5
+
+    T = np.array([[dx/L, dy/L, dz/L],
+                  [-dx*dy/(L*L_star), L_star/L, dy*dz/(L*L_star)],
+                  [-dz/L_star, 0, dx/L_star]])
     zero_mat = np.zeros((3,3))
-    A = np.block([T, zero_mat, zero_mat, zero_mat],
+    A = np.block([[T, zero_mat, zero_mat, zero_mat],
                  [zero_mat, T, zero_mat, zero_mat],
                  [zero_mat, zero_mat, T, zero_mat],
-                 [zero_mat, zero_mat, zero_mat, T])
+                 [zero_mat, zero_mat, zero_mat, T]])
     return A @ k @ A.transpose()
 
-def compute_angle(coord, node1, node2): #à modif
-    dy = coord[node2,1] - coord[node1,1]
-    dx = coord[node2,0] - coord[node1,0]
-    return np.arctan2(dy,dx)
 
-def k_local_mat(E, A, I, L, Phi): #à modif
-    k = np.array([[E*A/L, 0, 0, -E*A/L, 0, 0],
-                [0, 12*E*I/(L**3*(1+Phi)), 6*E*I/(L**2*(1+Phi)), 0, -12*E*I/(L**3*(1+Phi)), 6*E*I/(L**2*(1+Phi))],
-                [0, 6*E*I/(L**2*(1+Phi)), (4+Phi)*E*I/(L*(1+Phi)), 0, -6*E*I/(L**2*(1+Phi)), (2-Phi)*E*I/(L*(1+Phi))],
-                [-E*A/L, 0, 0, E*A/L, 0, 0],
-                [0, -12*E*I/(L**3*(1+Phi)), -6*E*I/(L**2*(1+Phi)), 0, 12*E*I/(L**3*(1+Phi)), -6*E*I/(L**2*(1+Phi))],
-                [0, 6*E*I/(L**2*(1+Phi)), (2-Phi)*E*I/(L*(1+Phi)), 0, -6*E*I/(L**2*(1+Phi)), (4+Phi)*E*I/(L*(1+Phi))]])
-    return k
+def k_local_mat(E, A, I_y, I_z, L, Phi_y, Phi_z, G, J):
+
+    k_z = (E*I_z/((1+Phi_y)*L**2)) * np.array([[12, 6*L, -12, 6*L],
+                    [0, (4+Phi_y)*L**2, -6*L, (2-Phi_y)*L**2],
+                    [0, 0, 12, -6*L],
+                    [0, 0, 0, (4+Phi_y)*L**2]])
+
+    k_y = (E*I_y/((1+Phi_z)*L**2)) * np.array([[12, -6*L, -12, -6*L],
+                    [0, (4+Phi_z)*L**2, 6*L, (2-Phi_z)*L**2],
+                    [0, 0, 12, 6*L],
+                    [0, 0, 0, (4+Phi_z)*L**2]])
+    stiffness = np.zeros((12,12))
+    stiffness[0,0] = E*A/L; stiffness[0,6] = -E*A/L
+    stiffness[1,1] = k_z[0,0]; stiffness[1,5] = k_z[0,1]; stiffness[1,7] = k_z[0,2]; stiffness[1,11]= k_z[0,3]
+    stiffness[2,2] = k_y[0,0]; stiffness[2,4] = k_y[0,1]; stiffness[2,8] = k_y[0,2]; stiffness[2,10]= k_y[0,3]
+    stiffness[3,3] = G*J/L; stiffness[3,9] = -G*J/L
+    stiffness[4,2] = k_y[0,1]; stiffness[4,4] = k_y[1,1]; stiffness[4,8] = k_y[1,2]; stiffness[2,10]= k_y[1,3]
+    stiffness[5,1] = k_z[0,1]; stiffness[5,5] = k_z[1,1]; stiffness[5,7] = k_z[1,2]; stiffness[5,11]= k_z[1,3]
+    stiffness[6,0] = -E*A/L; stiffness[6,6] = E*A/L
+    stiffness[7,1] = k_z[0,2]; stiffness[7,5] = k_z[1,2]; stiffness[7,7] = k_z[2,2]; stiffness[7,11]= k_z[2,3]
+    stiffness[8,2] = k_y[0,2]; stiffness[8,4] = k_y[1,2]; stiffness[8,8] = k_y[2,2]; stiffness[8,10]= k_y[2,3]
+    stiffness[9,3] = -G*J/L; stiffness[9,9] = G*J/L
+    stiffness[10,2] = k_y[0,3]; stiffness[10,4] = k_y[1,3]; stiffness[10,8] = k_y[2,3]; stiffness[10,10]= k_y[3,3]
+    stiffness[11,1] = k_z[0,3]; stiffness[11,5] = k_z[1,3]; stiffness[11,7] = k_z[2,3]; stiffness[11,11]= k_z[3,3]
+
+    return stiffness
 
 def assemble(data_structure): #à modif
     n_max_dof = data_structure["nNode"]*3
@@ -164,28 +184,31 @@ def assemble(data_structure): #à modif
 
 
     k_global = np.zeros((nDof, nDof))
-    N_dof = np.zeros(6)
+    N_dof = np.zeros(12)
 
     for i in range(nElement):
         node1 = int(IN[i,0])
         node2 = int(IN[i,1])
         E = CMat[int(IMat[i]), 0]
         A = CSect[int(ISect[i]), 0]
-        I = CSect[int(ISect[i]), 1]
+        A_y = CSect[int(ISect[i]), 1]
+        A_z = CSect[int(ISect[i]), 2]
+        I_y = CSect[int(ISect[i]), 4]
+        I_z = CSect[int(ISect[i]), 5]
+        J = CSect[int(ISect[i]), 8]
         L = ((coord[node1,0] - coord[node2,0])**2 + (coord[node1,1] - coord[node2,1])**2)**0.5
-        CHI = CSect[int(ISect[i]), 2]
+        CHI = CSect[int(ISect[i]), 6]
         CNU = CMat[int(IMat[i]), 1]
 
         GG = E/(2*(1+CNU))
-        Phi = 12*CHI*(E/GG)*(I/A)/L**2
+        Phi_y = 12*CHI*(E/GG)*(I_z/A_y)/L**2
+        Phi_z = 12*CHI*(E/GG)*(I_y/A_z)/L**2
 
-        alpha = compute_angle(coord, node1, node2)
+        k_local = k_local_mat(E, A, I_y, I_z, L, Phi_y, Phi_z, GG, J)
+        k_local = rotate_mat(k_local, coord[node1][:], coord[node2][:])
 
-        k_local = k_local_mat(E, A, I, L, Phi)
-        k_local = rotate_mat(k_local, alpha)
-
-        N_dof[0:3] = Idof[node1,:]
-        N_dof[3:6] = Idof[node2,:]
+        N_dof[0:6] = Idof[node1,:]
+        N_dof[6:12] = Idof[node2,:]
         for j in range(6):
             i_dof = int(N_dof[j])
             if i_dof >=0 :

@@ -10,8 +10,8 @@ if __name__ == "__main__":
 
     fem.scode(data_structure, f)
 
-    fem.loads(data_structure, f)
-
     fem.assemble(data_structure)
+
+    print(data_structure["k_global"])
 
     f.close()
