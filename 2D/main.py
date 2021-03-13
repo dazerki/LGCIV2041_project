@@ -4,7 +4,7 @@ import fem
 
 if __name__ == "__main__":
     #main code
-    f = open("FRAME01.txt", "r")
+    f = open("Frame-Juventus.txt", "r")
     #geomet
     data_structure = fem.geomet(f)
 
