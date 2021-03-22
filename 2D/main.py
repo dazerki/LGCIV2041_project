@@ -1,4 +1,3 @@
-#python file
 import numpy as np
 import fem
 
@@ -15,6 +14,8 @@ if __name__ == "__main__":
     fem.assemble(data_structure)
 
     fem.linear_solver(data_structure)
+
+    fem.stress(data_structure)
 
     fem.write_output(data_structure)
 

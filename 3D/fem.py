@@ -76,6 +76,7 @@ def scode(data_structure, f):
     #restraints
     f.readline()
     nRest = int(f.readline())
+
     for i in range(nRest):
         line = f.readline()
         line_split = line.split()
@@ -90,7 +91,6 @@ def scode(data_structure, f):
 
     nDof = 0
 
-
     for i in range(nNode):
         for j in range(6):
             if Idof[i,j] == -2:
@@ -98,13 +98,33 @@ def scode(data_structure, f):
                 nDof = nDof + 1
             elif Idof[i,j] >= 0:
                 master_node = Idof[i,j]
-                Idof[i,j] = Idof[master_node,j]
+                Idof[i,j] = Idof[int(master_node),j]
 
 
 
     data_structure["Idof"] = Idof
     data_structure["nRest"] = nRest
     data_structure["nDof"] = nDof
+
+    return 0
+
+def loads(data_structure, f):
+    Idof = data_structure["Idof"]
+    nDof = data_structure["nDof"]
+
+    #concentrated LOADS
+
+    VLoads = np.zeros(nDof)
+
+    f.readline()
+    nCar = int(f.readline())
+    for i in range(nCar):
+        line = f.readline()
+        line_split = line.split()
+        L = int(Idof[int(line_split[0]), int(line_split[1])])
+        VLoads[L] = VLoads[L] + float(line_split[2])
+
+    data_structure["VLoads"] = VLoads
 
     return 0
 
@@ -181,14 +201,18 @@ def assemble(data_structure): #à modif
     coord = data_structure["coord"]
     Idof = data_structure["Idof"]
     nDof = data_structure["nDof"]
+    print(nDof)
+    print(Idof)
 
 
     k_global = np.zeros((nDof, nDof))
+
     N_dof = np.zeros(12)
 
     for i in range(nElement):
         node1 = int(IN[i,0])
         node2 = int(IN[i,1])
+
         E = CMat[int(IMat[i]), 0]
         A = CSect[int(ISect[i]), 0]
         A_y = CSect[int(ISect[i]), 1]
@@ -209,15 +233,52 @@ def assemble(data_structure): #à modif
 
         N_dof[0:6] = Idof[node1,:]
         N_dof[6:12] = Idof[node2,:]
-        for j in range(6):
+
+        for j in range(12):
             i_dof = int(N_dof[j])
             if i_dof >=0 :
-                for p in range(6):
+                for p in range(12):
                      j_dof = int(N_dof[p])
                      if j_dof >=0 :
                          k_global[i_dof, j_dof] += k_local[j,p]
 
 
 
+
     data_structure["k_global"] = k_global
     return 0
+
+def linear_solver(data_structure):
+    k_global = data_structure["k_global"]
+    # with open('outfile.txt','wb') as f:
+    #     for line in np.matrix(k_global):
+    #         np.savetxt(f, line, fmt='%.2f')
+
+
+    VLoads = data_structure["VLoads"]
+    positions = np.linalg.solve(k_global, VLoads)
+
+    data_structure["positions"] = positions
+    return 0
+
+def write_output(data_structure):
+    nDof = data_structure["nDof"]
+    Idof = data_structure["Idof"]
+    nNode = data_structure["nNode"]
+    positions = data_structure["positions"]
+
+    file = open("output.txt", "w")
+
+    file.write("NODAL DISPLACEMENTS: \n")
+    file.write("NODES             U             V           THETA \n")
+    data = np.zeros(6)
+    for i in range(nNode):
+        file.write(str(i) + "           ")
+
+        for j in range(6):
+            if(Idof[i,j]<0):
+                data[j] = 0.0
+            else:
+                data[j] = positions[int(Idof[i,j])]
+
+        file.write('{:e}  {:e}  {:e} \n'.format(data[0], data[1], data[5]))

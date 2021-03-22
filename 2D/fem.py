@@ -56,10 +56,12 @@ def geomet(f):
     f.readline()
     nRigid = int(f.readline())
     CRigid = np.empty((nRigid,4))
+    IRigid = np.zeros(nElement)
     for i in range(nRigid):
         line = f.readline()
         line_split = line.split()
-        CRigid[i] = [float(j) for j in line_split]
+        CRigid[i] = [float(j) for j in line_split[1:]]
+        IRigid[int(line_split[0])] = 1
 
     data_structure = {
         "nNode": nNode,
@@ -74,6 +76,7 @@ def geomet(f):
         "CSect": CSect,
         "nRigid": nRigid,
         "CRigid": CRigid,
+        "IRigid": IRigid
     }
 
     return data_structure
@@ -356,7 +359,8 @@ def assemble(data_structure):
     nRigid = data_structure["nRigid"]
     VLoads = data_structure["VLoads"]
 
-
+    k_local_element = np.zeros((6*nElement, 6));
+    enf_element = np.zeros((nElement, 6));
     k_global = np.zeros((nDof, nDof))
     N_dof = np.zeros(6)
 
@@ -376,12 +380,15 @@ def assemble(data_structure):
         alpha = compute_angle(coord, node1, node2)
 
         k_local = k_local_mat(E, A, I, L, Phi)
+        k_local_element[i*6:i*6+6,:] = k_local
         k_local = rotate_mat(k_local, alpha)
+
         if nRigid > 0:
             A_r, B_r, C_r, D_r = CRigid[1:5]
             k_local = rigid_mat(k_local, A_r, B_r, C_r, D_r)
 
         enf = equivalent_nodal_forces(data_structure, i)
+        enf_element[i, :] = enf
         enfg = rotate_vect(enf, alpha)
         if nRigid > 0:
             A_r, B_r, C_r, D_r = CRigid[1:5]
@@ -402,6 +409,8 @@ def assemble(data_structure):
 
     data_structure["k_global"] = k_global
     data_structure["VLoads"] = VLoads
+    data_structure["k_local_element"] = k_local_element
+    data_structure["enf_element"] = enf_element
     return 0
 
 def linear_solver(data_structure):
@@ -417,6 +426,8 @@ def write_output(data_structure):
     Idof = data_structure["Idof"]
     nNode = data_structure["nNode"]
     positions = data_structure["positions"]
+    nElement = data_structure["nElement"]
+    QF = data_structure["QF"]
 
     file = open("output.txt", "w")
 
@@ -433,3 +444,99 @@ def write_output(data_structure):
                 data[j] = positions[int(Idof[i,j])]
 
         file.write('{:e}  {:e}  {:e} \n'.format(data[0], data[1], data[2]))
+
+    file.write("ELEMENT STRESS: \n")
+    file.write("ELEMENT             N1             T1           M1              N2             T2           M2\n")
+    data_stress = np.zeros(6)
+    for i in range(nElement):
+        file.write(str(i) + "           ")
+
+        for j in range(6):
+                data_stress[j] = QF[j,i]
+
+        file.write('{:e}  {:e}  {:e}  {:e}  {:e}  {:e}\n'.format(data_stress[0], data_stress[1], data_stress[2], data_stress[3], data_stress[4], data_stress[5]))
+    return 0
+
+def stress(data_structure):
+    k_local_element = data_structure["k_local_element"]
+    enf_element = data_structure["enf_element"]
+    nElement = data_structure["nElement"]
+    IN = data_structure["IN"]
+    CRigid = data_structure["CRigid"]
+    nRigid = data_structure["nRigid"]
+    Idof = data_structure["Idof"]
+    IRig = data_structure["IRigid"]
+    coord = data_structure["coord"]
+    VLoads = data_structure["VLoads"]
+
+    QS = np.zeros((6, nElement))
+    QF = np.zeros((6, nElement))
+
+
+    for e in range(nElement):
+        N1 = int(IN[e, 0])
+        N2 = int(IN[e, 1])
+
+        if nRigid>0:
+            A = CRigid[e,0]
+            B = CRigid[e,1]
+            C = CRigid[e,2]
+            D = CRigid[e,3]
+        else:
+            A = 0
+            B = 0
+            C = 0
+            D = 0
+
+        DX = coord[N2,0] - coord[N1,0] - A - C
+        DY = coord[N2,1] - coord[N1,1] - B - D
+        AL = (DX**2 + DY**2)**0.5
+        CA = DX/AL
+        SA = DY/AL
+
+        ST = k_local_element[e*6:e*6+6,:]
+        ENF = enf_element[e, :]
+
+        Ncode = -1*np.ones((6, 1))
+        for i in range(3):
+            Ncode[i] = Idof[N1, i]
+            Ncode[i+3] = Idof[N2, i]
+
+        for i in range(6):
+            if Ncode[i] > -1:
+                QS[i,e] = VLoads[int(Ncode[i])]
+            else:
+                QS[i,e] = 0.0
+
+        if IRig[e] == 1:
+            AH = QS[0,e] - QS[2,e]*B
+            AV = -QS[0,e] + QS[2,e]*A
+            QS[0,e] = AH
+            QS[2,e] = AV
+            AH = QS[3,e] + QS[5,e]*D
+            AV = QS[4,e] - QS[5,e]*C
+            QS[3,e] = AH
+            QS[4,e] = AV
+
+        AH = QS[0,e]*CA + QS[1,e]*SA
+        AV = -QS[0,e]*SA + QS[1,e]*CA
+        QS[0,e] = AH
+        QS[1,e] = AV
+        AH = QS[3,e]*CA + QS[4,e]*SA
+        AV = -QS[3,e]*SA + QS[4,e]*CA
+        QS[3,e] = AH
+        QS[4,e] = AV
+
+        for i in range(6):
+            QF[i,e] = -ENF[i]
+            for k in range(6):
+                QF[i,e] += ST[i,k]*QS[k,e]
+
+
+    data_structure["QF"] = QF
+
+
+
+
+
+    return 0
