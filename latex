@@ -1,0 +1,338 @@
+Now that each local stiffness matrix can be determined, we just need to compute the forces applied on each node and everything will be ready to assemble and solve our system.
+Theses forces are compute by the function \textit{equivalent\_nodal\_forces(data_structure, NE)}. It takes in argument the data_structure and the number of the element and it
+return a [1x6] vector with the equivalent nodal forces to apply on the two nodes of the element \textit{NE}.\\
+
+\begin{lstlisting}
+def equivalent_nodal_forces(data_structure, NE):
+    ENF = np.zeros(6)
+    Card = data_structure["Card"]
+    coord = data_structure["coord"]
+    ISect = data_structure["ISect"]
+    IMat = data_structure["IMat"]
+    CMat = data_structure["CMat"]
+    CSect = data_structure["CSect"]
+    IN = data_structure["IN"]
+
+    N1 = int(IN[NE,0])
+    N2 = int(IN[NE,1])
+
+    IS = int(ISect[NE])
+    IM = int(IMat[NE])
+    AA = CSect[IS, 0]
+    AJ = CSect[IS, 1]
+    CHI = CSect[IS, 2]
+    AH = CSect[IS, 3]
+    EE = CMat[IM, 0]
+    CNU = CMat[IM, 1]
+    ALPHA = CMat[IM, 2]
+    WEIGHT = CMat[IM, 3]
+
+    if(data_structure["nRigid"]>0):
+        CRigid = data_structure["CRigid"]
+        A = CRigid[NE,1]
+        B = CRigid[NE,2]
+        C = CRigid[NE,3]
+        D = CRigid[NE,4]
+    else:
+        A=0; B=0; C=0; D=0;
+
+    PX = Card[NE, 0]
+    PY1 = Card[NE, 1]
+    PY2 = Card[NE, 2]
+    DTI = Card[NE, 3]
+    DTS = Card[NE, 4]
+    PREC = Card[NE, 5]
+    E1 = Card[NE, 6]
+    E2 = Card[NE, 7]
+    EM = Card[NE, 8]
+
+    DX = coord[N2,0] - coord[N1,0] - A - C
+    DY = coord[N2,1] - coord[N1,1] - B - D
+    AL = (DX**2 + DY**2)**0.5
+    CA = DX/AL
+    SA = DY/AL
+
+    ALW = WEIGHT*AA
+
+    PX = PX - ALW*SA
+    PY1 = PY1 - ALW*CA
+    PY2 = PY2 - ALW*CA
+
+    DTM = (DTS+DTI)/2
+    DTD = (DTS-DTI)/2
+
+    TETA1 = (-3*E1 + 4*EM - E2)/AL
+    TETA2 = (E1-4*EM + 3*E2)/AL
+
+    CURV = 4*(E1+E2-2*EM)/AL**2
+
+    WW = PREC*CURV
+    PY1 = PY1 + WW
+    PY2 = PY2 + WW
+
+    DPY = PY2 - PY1
+
+    ENF[0] = PX*AL/2 - ALPHA*DTM*EE*AA
+    ENF[1] = PY1*AL/2 + 0.15*DPY*AL
+    ENF[2] = (PY1*AL**2)/12 + (DPY*AL**2)/30 + 2*ALPHA*DTD*EE*AJ/AH
+    ENF[3] = PX*AL/2 + 0.35*DPY*AL
+    ENF[4] = PY1*AL/2 + 0.35*DPY*AL
+    ENF[5] = -(PY1*AL**2)/12 - (DPY*AL**2)/20 - 2*ALPHA*DTD*EE*AJ/AH
+
+    if data_structure["nRigid"]>0:
+        rigid_vect(ENF, A, B, C, D)
+
+    ENF[0] = ENF[0] + PREC
+    ENF[1] = ENF[1] + PREC*TETA1
+    ENF[2] = ENF[2] - PREC*E1
+    ENF[3] = ENF[3] - PREC
+    ENF[4] = ENF[4] - PREC*TETA2
+    ENF[5] = ENF[5] + PREC*E2
+
+
+    return ENF
+\end{lstlisting}
+\gray{Lines 2-9:} Import from the data structure the array we need. \\
+\gray{Lines 11-42:} From these arrays, initialize the variables that will be used.\\
+\gray{Lines 44-48:} Compute geometrical values taking into account rigid links and tilted elements.\\
+\gray{Lines 50-68:} Compute the parameters used to compute the equivalent nodal forces.\\
+\gray{Lines 70-75:} Compute the equivalent nodal forces from the mass and the distributed loads. \\
+\gray{Lines 80-85:} Add the equivalent nodal forces due to pre-compression.\\
+
+#######################################################################################################################
+#######################################################################################################################
+The assemble subroutine is the most complex one. With all the data stored in the data structure and using the other subroutine, it assemble all the
+local stiffness matrix and local loads of each element into a global stiffness matrix and the global load vector. To do so it will use the connectivity data
+and add the values from the element stiffness matrix at the place that correspond to the degree of freedom of the element in the global matrix. Similarly it assemble the
+nodal forces of the different elements.
+
+\begin{lstlisting}
+def assemble(data_structure):
+    n_max_dof = data_structure["nNode"]*3
+    nElement = data_structure["nElement"]
+    IMat = data_structure["IMat"]
+    CMat = data_structure["CMat"]
+    IN = data_structure["IN"]
+    ISect = data_structure["ISect"]
+    CSect = data_structure["CSect"]
+    coord = data_structure["coord"]
+    Idof = data_structure["Idof"]
+    nDof = data_structure["nDof"]
+    CRigid = data_structure["CRigid"]
+    nRigid = data_structure["nRigid"]
+    VLoads = data_structure["VLoads"]
+
+    k_local_element = np.zeros((6*nElement, 6));
+    enf_element = np.zeros((nElement, 6));
+    k_global = np.zeros((nDof, nDof))
+    N_dof = np.zeros(6)
+
+    for i in range(nElement):
+        node1 = int(IN[i,0])
+        node2 = int(IN[i,1])
+        E = CMat[int(IMat[i]), 0]
+        A = CSect[int(ISect[i]), 0]
+        I = CSect[int(ISect[i]), 1]
+        L = ((coord[node1,0] - coord[node2,0])**2 + (coord[node1,1] - coord[node2,1])**2)**0.5
+        CHI = CSect[int(ISect[i]), 2]
+        CNU = CMat[int(IMat[i]), 1]
+
+        GG = E/(2*(1+CNU))
+        Phi = 12*CHI*(E/GG)*(I/A)/L**2
+
+        alpha = compute_angle(coord, node1, node2)
+
+        k_local = k_local_mat(E, A, I, L, Phi)
+        k_local_element[i*6:i*6+6,:] = k_local
+        k_local = rotate_mat(k_local, alpha)
+
+        if nRigid > 0:
+            A_r, B_r, C_r, D_r = CRigid[1:5]
+            k_local = rigid_mat(k_local, A_r, B_r, C_r, D_r)
+
+        enf = equivalent_nodal_forces(data_structure, i)
+        enf_element[i, :] = enf
+        enfg = rotate_vect(enf, alpha)
+        if nRigid > 0:
+            A_r, B_r, C_r, D_r = CRigid[1:5]
+            enfg = rigid_mat(enfg, A_r, B_r, C_r, D_r)
+
+        N_dof[0:3] = Idof[node1,:]
+        N_dof[3:6] = Idof[node2,:]
+        for j in range(6):
+            i_dof = int(N_dof[j])
+            if i_dof >=0 :
+                VLoads[i_dof] += enfg[j]
+                for p in range(6):
+                     j_dof = int(N_dof[p])
+                     if j_dof >=0 :
+                         k_global[i_dof, j_dof] += k_local[j,p]
+
+
+
+    data_structure["k_global"] = k_global
+    data_structure["VLoads"] = VLoads
+    data_structure["k_local_element"] = k_local_element
+    data_structure["enf_element"] = enf_element
+    return 0
+\end{lstlisting}
+\gray{Lines 2-14:} Import from the data structure the array that the function will use.\\
+\gray{Lines 16-19:} Initialize the different arrays used in the function, \textit{k\_local\_element} and \textit{enf\_element} are then used to compute the stresses.\\
+\gray{Line 21:} For each element we will update the global stiffness matrix and the global load vector.\\
+\gray{Lines 22-34:} Initialization of the variables used in the function \textit{k\_local\_mat(E, A, I, L, Phi)} (see MKK subroutine section).\\
+\gray{Lines 36-38:} Computation of the local stiffness matrix, saving the matrix in \textit{k\_local\_element}, change the matrix to correspond to the rotated system.\\
+\gray{Lines 40-42:} Update the local stiffness matrix to correspond to the rigid system if there is rigid links. The matrix has now the same system of axis than the global system.\\
+\gray{Lines 44-49:} Same procedure as for the local stiffness matrix but for the nodal forces vector.\\
+\gray{Lines 51-52:} Store the degrees of freedom of the element in the \textit{N\_dof} vector.\\
+\gray{Lines 53-60:} Add the values of the local stiffness matrix to the global stiffness matrix to the place that correspond to the degrees of freedom of the element. It do the same for the
+loads vector but in 1D instead of 2D.\\
+
+#######################################################################################
+#######################################################################################
+The solve subroutine is done by the function \textit{linear\_solver(data\_structure)}. It really simply solve the linear problem with the function \textit{solve(k\_global, Vloads)} from numpy.
+
+\begin{lstlisting}
+def linear_solver(data_structure):
+    k_global = data_structure["k_global"]
+    VLoads = data_structure["VLoads"]
+    positions = np.linalg.solve(k_global, VLoads)
+
+    data_structure["positions"] = positions
+    return 0
+\end{lstlisting}
+\gray{Lines 2-3:} Import the stiffness matrix and the load vector from the data structure.\\
+\gray{Lines 4-6:} Solve the linear system and store the results in the data structure.\\
+
+##########################################################################################
+##########################################################################################
+The function \textit{stress(data\_structure)} is used to compute the stress at each node. It use the local stiffness matrices stored previously to compute the
+impact of a displacement on the nodal forces. Of course it also take into account the nodal forces that we stored previously.
+
+\begin{lstlisting}
+def stress(data_structure):
+    k_local_element = data_structure["k_local_element"]
+    enf_element = data_structure["enf_element"]
+    nElement = data_structure["nElement"]
+    IN = data_structure["IN"]
+    CRigid = data_structure["CRigid"]
+    nRigid = data_structure["nRigid"]
+    Idof = data_structure["Idof"]
+    IRig = data_structure["IRigid"]
+    coord = data_structure["coord"]
+    VLoads = data_structure["VLoads"]
+
+    QS = np.zeros((6, nElement))
+    QF = np.zeros((6, nElement))
+
+
+    for e in range(nElement):
+        N1 = int(IN[e, 0])
+        N2 = int(IN[e, 1])
+
+        if nRigid>0:
+            A = CRigid[e,0]
+            B = CRigid[e,1]
+            C = CRigid[e,2]
+            D = CRigid[e,3]
+        else:
+            A = 0
+            B = 0
+            C = 0
+            D = 0
+
+        DX = coord[N2,0] - coord[N1,0] - A - C
+        DY = coord[N2,1] - coord[N1,1] - B - D
+        AL = (DX**2 + DY**2)**0.5
+        CA = DX/AL
+        SA = DY/AL
+
+        ST = k_local_element[e*6:e*6+6,:]
+        ENF = enf_element[e, :]
+
+        Ncode = -1*np.ones((6, 1))
+        for i in range(3):
+            Ncode[i] = Idof[N1, i]
+            Ncode[i+3] = Idof[N2, i]
+
+        for i in range(6):
+            if Ncode[i] > -1:
+                QS[i,e] = VLoads[int(Ncode[i])]
+            else:
+                QS[i,e] = 0.0
+
+        if IRig[e] == 1:
+            AH = QS[0,e] - QS[2,e]*B
+            AV = -QS[0,e] + QS[2,e]*A
+            QS[0,e] = AH
+            QS[2,e] = AV
+            AH = QS[3,e] + QS[5,e]*D
+            AV = QS[4,e] - QS[5,e]*C
+            QS[3,e] = AH
+            QS[4,e] = AV
+
+        AH = QS[0,e]*CA + QS[1,e]*SA
+        AV = -QS[0,e]*SA + QS[1,e]*CA
+        QS[0,e] = AH
+        QS[1,e] = AV
+        AH = QS[3,e]*CA + QS[4,e]*SA
+        AV = -QS[3,e]*SA + QS[4,e]*CA
+        QS[3,e] = AH
+        QS[4,e] = AV
+
+        for i in range(6):
+            QF[i,e] = -ENF[i]
+            for k in range(6):
+                QF[i,e] += ST[i,k]*QS[k,e]
+
+    data_structure["QF"] = QF
+
+    return 0
+\end{lstlisting}
+
+
+#################################################################################
+#################################################################################
+The last function that we call is \textit{write\_output(data\_structure)} and it will simply write the main results in the file
+named \textit{output.txt}.
+
+\begin{lstlisting}
+def write_output(data_structure):
+    nDof = data_structure["nDof"]
+    Idof = data_structure["Idof"]
+    nNode = data_structure["nNode"]
+    positions = data_structure["positions"]
+    nElement = data_structure["nElement"]
+    QF = data_structure["QF"]
+
+    file = open("output.txt", "w")
+
+    file.write("NODAL DISPLACEMENTS: \n")
+    file.write("NODES             U             V           THETA \n")
+    data = np.zeros(3)
+    for i in range(nNode):
+        file.write(str(i) + "           ")
+
+        for j in range(3):
+            if(Idof[i,j]<0):
+                data[j] = 0.0
+            else:
+                data[j] = positions[int(Idof[i,j])]
+
+        file.write('{:e}  {:e}  {:e} \n'.format(data[0], data[1], data[2]))
+
+    file.write("ELEMENT STRESS: \n")
+    file.write("ELEMENT             N1             T1           M1              N2             T2           M2\n")
+    data_stress = np.zeros(6)
+    for i in range(nElement):
+        file.write(str(i) + "           ")
+
+        for j in range(6):
+                data_stress[j] = QF[j,i]
+
+        file.write('{:e}  {:e}  {:e}  {:e}  {:e}  {:e}\n'.format(data_stress[0], data_stress[1], data_stress[2], data_stress[3], data_stress[4], data_stress[5]))
+    return 0
+\end{lstlisting}
+\gray{Lines 2-7:} Import the data that we need from the data structure.\\
+\gray{Line 9:} Open the file \textit{output.txt} and initialize the file buffer.\\
+\gray{Lines 11-23:} Write the nodal displacements in the file.\\
+\gray{Lines 25-34:} Write the nodal stresses in the file.\\

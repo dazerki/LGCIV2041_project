@@ -19,7 +19,4 @@ if __name__ == "__main__":
 
     fem.write_output(data_structure)
 
-
-
-
     f.close()

@@ -1,0 +1,64 @@
+FRAME 2                                : NODES, ELEMENTS, MATERIALS, SECTIONS
+13 12 1 1
+COORDINATE DEI NODI                    : ABSCISSA (X), ORDINATE (Y)
+  0.0    0.0
+  0.5    0.0
+  1.0    0.0
+  1.5    0.0
+  2.0    0.0
+  2.5    0.0
+  3.0    0.0
+  3.5    0.0
+  4.0    0.0
+  4.5    0.0
+  5.0    0.0
+  5.5    0.0
+  6.0    0.0
+CONNECTIVITY DATA                      : NODE1, NODE2, NUM. MAT., NUM. SEZ.
+0 1 0 0
+1 2 0 0
+2 3 0 0
+3 4 0 0
+4 5 0 0
+5 6 0 0
+6 7 0 0
+7 8 0 0
+8 9 0 0
+9 10 0 0
+10 11 0 0
+11 12 0 0
+MATERIALS CHARACTERISTICS              : MODULUS E, POISSON, ALFA, DENSITY
+30000000.0 0.0 0.0 0.0
+CHARACTERISTICS OF THE SECTIONS        : AREA, INERTIA, SHEAR FACTOR, DEEP
+0.18 0.0054 0.0 0.60
+RIGID LINKS                            : (NUMBER), A, B, C, D
+0
+RESTRAINTS                             : (NUMBER), NODE, DIRECTION
+3
+0 0
+0 1
+12 1
+DISPLACEMENTS                          : (NUMBER), NODE, DIRECTION, VALUE
+0
+SPRING                                 : (NUMBER), NODE, DIRECTION, STIFFNESS
+0
+CONCENTRATED LOADS                     : (NUMBER), NODE, DIRECTION, VALUE
+0
+DISTRIBUTED LOADS                      : (NUMBER), ELEM, PX, PY1, PY2
+12
+0 0.0 -10.0 -10.0
+1 0.0 -10.0 -10.0
+2 0.0 -10.0 -10.0
+3 0.0 -10.0 -10.0
+4 0.0 -10.0 -10.0
+5 0.0 -10.0 -10.0
+6 0.0 -10.0 -10.0
+7 0.0 -10.0 -10.0
+8 0.0 -10.0 -10.0
+9 0.0 -10.0 -10.0
+10 0.0 -10.0 -10.0
+11 0.0 -10.0 -10.0
+TEMPERATURE VARIATIONS                 : (NUMBER), ELEM, DTI, DTS
+0
+PRETENSION                             : (NUMBER), ELEM, P, E1, E2, EM
+0
